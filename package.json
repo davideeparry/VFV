@@ -1,0 +1,24 @@
+{
+  "name": "vfv",
+  "version": "1.0.0",
+  "description": "Creates frequency map of video input.",
+  "main": "VFV.js",
+  "bin": "VFV.js",
+  "dependencies": {
+    "color-convert": "^2.0.1",
+    "decibels": "^2.0.0",
+    "excel": "^1.0.1",
+    "excel4node": "^1.7.2",
+    "fft-js": "^0.0.12",
+    "fluent-ffmpeg": "^2.1.2",
+    "fourier-transform": "^1.1.2",
+    "jpeg-js": "^0.3.6",
+    "xlsx": "^0.15.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "David Parry",
+  "license": "MIT"
+}
