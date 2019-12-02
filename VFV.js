@@ -6,7 +6,6 @@ var convert = require('color-convert');
 var ffmpeg = require('fluent-ffmpeg');
 var readline = require('readline');
 
-//
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
@@ -17,11 +16,12 @@ var frame_width;
 var frame_height;
 var frame_rate;
 var input_file_path;
-var inputFileTemp;
+var ff_input_file_temp;
+// Program "Boot Sequence"
 if (!process.argv[2] || !process.argv[3] || !process.argv[4]) {
     rl.question('Path to video: ', function(answer) {
         input_file_path = answer;
-        inputFileTemp = ffmpeg(answer);
+        ff_input_file_temp = ffmpeg(answer);
         rl.question('How many frames to process per image: ', function(answer) {
             window_size = parseInt(answer);
             rl.question('How many FPS was the video recorded at: ', function(answer) {
@@ -32,18 +32,21 @@ if (!process.argv[2] || !process.argv[3] || !process.argv[4]) {
         });
         
     });
-    
-    
 }  else {
     window_size = parseInt(process.argv[3]);
     frame_rate = parseInt(process.argv[4]); 
-    inputFileTemp = ffmpeg(process.argv[2]);
+    ff_input_file_temp = ffmpeg(process.argv[2]);
     input_file_path = process.argv[2];
     startProgram();
 }
 
 function startProgram() {
-    inputFileTemp.on('codecData', function (data) {
+    // Create output directory if does not exist
+    if (!fs.existsSync('./output')){
+        fs.mkdirSync('./output');
+    }
+    // Read in input file metadata, rest of program waits on this. TODO: Should format differently.
+    ff_input_file_temp.on('codecData', function (data) {
         console.log(data);
         w_h = data.video_details[4];
         frame_width = parseInt(w_h);
@@ -63,9 +66,9 @@ function startProgram() {
             }
         }
         
-        var output_chunk_plane = new Array();
+        var f_output_chunk_plane = new Array();
         for (var output_width = 0; output_width < frame_width; output_width++) {
-            output_chunk_plane[output_width] = new Array();
+            f_output_chunk_plane[output_width] = new Array();
         }
         
         var i_output_chunk_plane = new Array();
@@ -73,29 +76,24 @@ function startProgram() {
             i_output_chunk_plane[output_width] = new Array();
         }
         
-        // Process the input file
+        // Process the input file   
+        var ff_input_file = ffmpeg(input_file_path);
         
-        
-        
-        var inputFile = ffmpeg(input_file_path);
-        
-        /*inputFile.on('codecData', function (data) {
+        /*ff_input_file.on('codecData', function (data) {
             w_h = data.video_details[4];
             frame_width = parseInt(w_h);
             frame_height = parseInt(w_h.substring(w_h.indexOf('x')+1,w_h.length));
         });*/
         
-        inputFile.on('end', function() { // Called when the input file has been converted
+        ff_input_file.on('end', function() { // Called when the input file has been converted
             var file = fs.createReadStream('./temp.yuv', {highWaterMark: chunk_size});
             // The event handler for the streamed data
             file.on('data', function (chunk) {
                 chunk.copy(data,frame_counter*num_pixels,0,num_pixels);
                 frame_counter = frame_counter+1;
                 if (frame_counter === window_size) {
-                    process_window();
-                    make_output_jpeg();
-                    // Here I need to write a window
-                    console.log("FFT #" + output_counter + " complete.");
+                    processWindow();
+                    makeOutputJpeg();
                     frame_counter = 0;
                 }
             });
@@ -115,70 +113,70 @@ function startProgram() {
             });
         });
         
-        inputFile.save('./temp.yuv'); 
+        ff_input_file.save('./temp.yuv'); 
         
         // Chunk-size specified to be the size of a YUV frame
         
         
-        function make_output_jpeg() {
+        function makeOutputJpeg() {
             var data_index = 0;
             var data_index_raw = 0;
             var max_i= 0;
             var max_f = 0;
             var max_i_f = 0;
-            var frameData = Buffer.allocUnsafe(frame_width * frame_height * 4);
-            var frameDataRaw = Buffer.allocUnsafe(frame_width * frame_height * 4);
+            var frame_data = Buffer.allocUnsafe(frame_width * frame_height * 4);
+            var frame_data_raw = Buffer.allocUnsafe(frame_width * frame_height * 4);
             for (var height = 0; height < frame_height; height++) {
                 for (var width = 0; width < frame_width; width++) {
-                    if (output_chunk_plane[width][height] > max_f) {
-                        max_f = output_chunk_plane[width][height];
+                    if (f_output_chunk_plane[width][height] > max_f) {
+                        max_f = f_output_chunk_plane[width][height];
                     }
                     if (i_output_chunk_plane[width][height] > max_i) {
                         max_i = i_output_chunk_plane[width][height];
                     }
-                    if (i_output_chunk_plane[width][height]*output_chunk_plane[width][height] > max_i_f) {
-                        max_i_f = i_output_chunk_plane[width][height]*output_chunk_plane[width][height];
+                    if (i_output_chunk_plane[width][height]*f_output_chunk_plane[width][height] > max_i_f) {
+                        max_i_f = i_output_chunk_plane[width][height]*f_output_chunk_plane[width][height];
                     }
                 }
             }
             for (var height = 0; height < frame_height; height++) {
                 for (var width = 0; width < frame_width; width++) {
-                    var h = (output_chunk_plane[width][height]/max_f)*359; // Scaled Output Freq
+                    var h = (f_output_chunk_plane[width][height]/max_f)*359; // Scaled Output Freq
                     var s = 100;
                     var v = (i_output_chunk_plane[width][height]/max_i)*99; // Scaled Output Energy
                     var rgb_array = convert.hsv.rgb(h,s,v);
                     // HSV Frame Data
-                    frameData[data_index++] = rgb_array[0];
-                    frameData[data_index++] = rgb_array[1];
-                    frameData[data_index++] = rgb_array[2];
-                    frameData[data_index++] = output_chunk_plane[width][height]; // Value is irrelevent not used by JPEG
+                    frame_data[data_index++] = rgb_array[0];
+                    frame_data[data_index++] = rgb_array[1];
+                    frame_data[data_index++] = rgb_array[2];
+                    frame_data[data_index++] = f_output_chunk_plane[width][height]; // Value is irrelevent not used by JPEG
                     // RAW Data Frame
-                    frameDataRaw[data_index_raw++] = output_chunk_plane[width][height];
-                    frameDataRaw[data_index_raw++] = i_output_chunk_plane[width][height];
-                    frameDataRaw[data_index_raw++] = 0;
-                    frameDataRaw[data_index_raw++] = 0;
+                    frame_data_raw[data_index_raw++] = f_output_chunk_plane[width][height];
+                    frame_data_raw[data_index_raw++] = i_output_chunk_plane[width][height];
+                    frame_data_raw[data_index_raw++] = 0;
+                    frame_data_raw[data_index_raw++] = 0;
                 }
             }
             // FOR HSV IMAGE
-            var rawImageData = {
-                data: frameData,
+            var raw_image_data = {
+                data: frame_data,
                 width: frame_width,
                 height: frame_height
               };
-            var jpegImageData = jpeg.encode(rawImageData, 100);
-            fs.writeFile("./output/hsv"+output_counter+".jpeg",jpegImageData.data, function(err) {
+            var jpeg_image_data = jpeg.encode(raw_image_data, 100);
+            fs.writeFile("./output/hsv"+output_counter+".jpeg",jpeg_image_data.data, function(err) {
                 if (err) {
                     console.log(err);
                 }
             });
             // FOR RAW IMAGE
-            var rawImageDataRaw = {
-                data: frameDataRaw,
+            var raw_image_data_raw = {
+                data: frame_data_raw,
                 width: frame_width,
                 height: frame_height
               };
-            var jpegImageDataRaw = jpeg.encode(rawImageDataRaw, 100);
-            fs.writeFile("./output/raw"+output_counter+".jpeg",jpegImageDataRaw.data, function(err) {
+            var jpeg_image_data_raw = jpeg.encode(raw_image_data_raw, 100);
+            fs.writeFile("./output/raw"+output_counter+".jpeg",jpeg_image_data_raw.data, function(err) {
                 if (err) {
                     console.log(err);
                 }
@@ -187,7 +185,7 @@ function startProgram() {
         }
         
         
-        function perform_fft_on_pixel(width, height) {
+        function performFftOnPixel(width, height) {
             var fft_input = [];
             for (var frame = 0; frame < (window_size); frame++) {
                 fft_input.push(chunk_cube[frame][height][width]);
@@ -203,14 +201,14 @@ function startProgram() {
                 }
             }
             var max_output_freq = max_output_index * freq_interval;
-            output_chunk_plane[width][height] = max_output_freq;
+            f_output_chunk_plane[width][height] = max_output_freq;
             i_output_chunk_plane[width][height] = gainToDecibels(max_output+1);//*max_output;
         };
         
         
         // Function is called each time the window worth of chunks is sitting as data
         // to turn that data into an array that will be processed by the FFT algorithm
-        function process_window() {
+        function processWindow() {
             var data_index = 0;
             for (var frame = 0; frame < window_size; frame++) {
                 for (var height = 0; height < frame_height; height++) {
@@ -223,7 +221,7 @@ function startProgram() {
         
             for (var height = 0; height < frame_height; height++) {
                 for (var width = 0; width < frame_width; width++) { 
-                    perform_fft_on_pixel(width, height);
+                    performFftOnPixel(width, height);
                 }
             }
             // At this point the chunk_cube is ready to be processed by the FFT
@@ -232,7 +230,7 @@ function startProgram() {
     });
     
     
-    inputFileTemp.save('./temp2.avi');
+    ff_input_file_temp.save('./temp2.avi');
 }
 
 
