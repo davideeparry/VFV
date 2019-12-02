@@ -18,7 +18,7 @@ var frame_rate;
 var input_file_path;
 var ff_input_file_temp;
 // Program "Boot Sequence"
-if (!process.argv[2] || !process.argv[3] || !process.argv[4]) {
+if (!process.argv[2] || !process.argv[3] || !process.argv[4] || !process.argv[5] || !process.argv[6]) {
     rl.question('Path to video: ', function(answer) {
         input_file_path = answer;
         ff_input_file_temp = ffmpeg(answer);
@@ -26,18 +26,26 @@ if (!process.argv[2] || !process.argv[3] || !process.argv[4]) {
             window_size = parseInt(answer);
             rl.question('How many FPS was the video recorded at: ', function(answer) {
                 frame_rate = parseInt(answer);
-                rl.close();
-                startProgram();
+                rl.question('Height in pixels: ', function(answer) {
+                    frame_height = parseInt(answer);
+                    rl.question('Width in pixels: ', function(answer) {
+                        frame_width = parseInt(answer);
+                        rl.close();
+                        startProgram();
+                    });
+                });
             });
         });
-        
     });
 }  else {
+    frame_width = parseInt(process.argv[6]);
+    frame_height = parseInt(process.argv[5]);
     window_size = parseInt(process.argv[3]);
     frame_rate = parseInt(process.argv[4]); 
     ff_input_file_temp = ffmpeg(process.argv[2]);
     input_file_path = process.argv[2];
     startProgram();
+    rl.close();
 }
 
 function startProgram() {
@@ -49,8 +57,8 @@ function startProgram() {
     ff_input_file_temp.on('codecData', function (data) {
         console.log(data);
         w_h = data.video_details[4];
-        frame_width = parseInt(w_h);
-        frame_height = parseInt(w_h.substring(w_h.indexOf('x')+1,w_h.length));
+        //frame_width = parseInt(w_h);
+        //frame_height = parseInt(w_h.substring(w_h.indexOf('x')+1,w_h.length));
         var num_pixels = frame_width*frame_height;
         var chunk_size = num_pixels + (num_pixels/2);
         var data = Buffer.allocUnsafe(num_pixels*window_size);
