@@ -17,6 +17,12 @@ var frame_height;
 var frame_rate;
 var input_file_path;
 var ff_input_file_temp;
+// FLAGS
+var first_window = 1;
+// Maxes for output
+var max_i= 0;
+var max_f = 0;
+var max_i_f = 0;
 // Program "Boot Sequence"
 if (!process.argv[2] || !process.argv[3] || !process.argv[4] || !process.argv[5] || !process.argv[6]) {
     rl.question('Path to video: ', function(answer) {
@@ -86,7 +92,7 @@ function startProgram() {
         
         // Process the input file   
         var ff_input_file = ffmpeg(input_file_path);
-        
+        // OLD CODE USED TO TRY AND AUTOMATICALLY GET METADATA, DIDN'T WORK BECAUSE THE video_details ARRAY DOES NOT ALWAYS PUT THE SAME DATA IN THE SAME PLACE
         /*ff_input_file.on('codecData', function (data) {
             w_h = data.video_details[4];
             frame_width = parseInt(w_h);
@@ -97,13 +103,23 @@ function startProgram() {
             var file = fs.createReadStream('./temp.yuv', {highWaterMark: chunk_size});
             // The event handler for the streamed data
             file.on('data', function (chunk) {
-                chunk.copy(data,frame_counter*num_pixels,0,num_pixels);
-                frame_counter = frame_counter+1;
-                if (frame_counter === window_size) {
+                if (first_window) {
+                    chunk.copy(data,frame_counter*num_pixels,0,num_pixels);
+                    frame_counter = frame_counter+1;
+                    if (frame_counter === window_size) {
+                        processWindow();
+                        makeOutputJpeg();
+                        first_window = 0;
+                    }
+                } else {
+                    // reindex buffer so that the first entry is now the second entry and there is one 
+                    // more spot avaliable at the end of the buffer.
+                    data.copy(data,0,num_pixels,(frame_counter-1)*num_pixels)
+                    chunk.copy(data,(frame_counter-2)*num_pixels,0,num_pixels);
                     processWindow();
                     makeOutputJpeg();
-                    frame_counter = 0;
                 }
+                
             });
         
             file.on('end', function() {
@@ -118,6 +134,11 @@ function startProgram() {
                        console.log(err);
                     }
                 });
+                // assembles the images into a video
+                var proc = ffmpeg('./output/hsv%d.jpeg')
+                .fps(25)
+                .addOption('-vf','format=yuv420p')
+                .save('./output/video.mp4');
             });
         });
         
@@ -129,21 +150,21 @@ function startProgram() {
         function makeOutputJpeg() {
             var data_index = 0;
             var data_index_raw = 0;
-            var max_i= 0;
-            var max_f = 0;
-            var max_i_f = 0;
+            
             var frame_data = Buffer.allocUnsafe(frame_width * frame_height * 4);
             var frame_data_raw = Buffer.allocUnsafe(frame_width * frame_height * 4);
-            for (var height = 0; height < frame_height; height++) {
-                for (var width = 0; width < frame_width; width++) {
-                    if (f_output_chunk_plane[width][height] > max_f) {
-                        max_f = f_output_chunk_plane[width][height];
-                    }
-                    if (i_output_chunk_plane[width][height] > max_i) {
-                        max_i = i_output_chunk_plane[width][height];
-                    }
-                    if (i_output_chunk_plane[width][height]*f_output_chunk_plane[width][height] > max_i_f) {
-                        max_i_f = i_output_chunk_plane[width][height]*f_output_chunk_plane[width][height];
+            if (first_window) {
+                for (var height = 0; height < frame_height; height++) {
+                    for (var width = 0; width < frame_width; width++) {
+                        if (f_output_chunk_plane[width][height] > max_f) {
+                            max_f = f_output_chunk_plane[width][height];
+                        }
+                        if (i_output_chunk_plane[width][height] > max_i) {
+                            max_i = i_output_chunk_plane[width][height];
+                        }
+                        if (i_output_chunk_plane[width][height]*f_output_chunk_plane[width][height] > max_i_f) {
+                            max_i_f = i_output_chunk_plane[width][height]*f_output_chunk_plane[width][height];
+                        }
                     }
                 }
             }
@@ -177,6 +198,7 @@ function startProgram() {
                     console.log(err);
                 }
             });
+            /*
             // FOR RAW IMAGE
             var raw_image_data_raw = {
                 data: frame_data_raw,
@@ -189,9 +211,9 @@ function startProgram() {
                     console.log(err);
                 }
             });
+            */
             output_counter++;
         }
-        
         
         function performFftOnPixel(width, height) {
             var fft_input = [];
@@ -240,6 +262,19 @@ function startProgram() {
     
     ff_input_file_temp.save('./temp2.avi');
 }
+
+process.on('exit', function(code) {
+    fs.unlink('./temp.yuv', function(err) {
+        if (err) {
+           console.log(err);
+        }
+    });
+    fs.unlink('./temp2.avi', function(err) {
+        if (err) {
+           console.log(err);
+        }
+    });
+})
 
 
 
