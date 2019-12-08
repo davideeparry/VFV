@@ -6,3 +6,4 @@ output/*
 *.mpg
 savedOutput
 savedOutput/*
+output*
