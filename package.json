@@ -7,6 +7,7 @@
   "dependencies": {
     "color-convert": "^2.0.1",
     "decibels": "^2.0.0",
+    "dsp.js": "^1.0.1",
     "excel": "^1.0.1",
     "excel4node": "^1.7.2",
     "fft-js": "^0.0.12",

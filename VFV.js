@@ -150,7 +150,7 @@ function startProgram() {
         function makeOutputJpeg() {
             var data_index = 0;
             var data_index_raw = 0;
-            
+
             var frame_data = Buffer.allocUnsafe(frame_width * frame_height * 4);
             var frame_data_raw = Buffer.allocUnsafe(frame_width * frame_height * 4);
             if (first_window) {
@@ -180,10 +180,12 @@ function startProgram() {
                     frame_data[data_index++] = rgb_array[2];
                     frame_data[data_index++] = f_output_chunk_plane[width][height]; // Value is irrelevent not used by JPEG
                     // RAW Data Frame
+                    /*
                     frame_data_raw[data_index_raw++] = f_output_chunk_plane[width][height];
                     frame_data_raw[data_index_raw++] = i_output_chunk_plane[width][height];
                     frame_data_raw[data_index_raw++] = 0;
                     frame_data_raw[data_index_raw++] = 0;
+                    */
                 }
             }
             // FOR HSV IMAGE
@@ -214,18 +216,26 @@ function startProgram() {
             */
             output_counter++;
         }
-        
+        function hammingWindow(n) {
+           return (.5 - 0.5*Math.cos(2*Math.PI*n/window_size));
+        }
         function performFftOnPixel(width, height) {
             var fft_input = [];
+            for (var i = 0; i < window_size/2; i++) {
+                fft_input.push(0);
+            }
             for (var frame = 0; frame < (window_size); frame++) {
-                fft_input.push(chunk_cube[frame][height][width]);
+                fft_input.push(chunk_cube[frame][height][width]* hammingWindow(frame));
+            }
+            for (var i = 0; i < window_size/2; i++) {
+                fft_input.push(0);
             }
             var fft_output = fft(fft_input);
             var freq_interval = frame_rate/window_size;
             var max_output = 0;
             var max_output_index = 0;
             for (var i = 0; i < fft_output.length; i++) {
-                if (fft_output[i] > max_output && i != 0) {
+                if (fft_output[i] > max_output && i > 10) {
                     max_output = fft_output[i];
                     max_output_index = i;
                 }

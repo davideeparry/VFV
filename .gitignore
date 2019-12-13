@@ -7,3 +7,4 @@ output/*
 savedOutput
 savedOutput/*
 output*
+node_modules
