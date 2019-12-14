@@ -231,7 +231,7 @@ function startProgram() {
                 fft_input.push(0);
             }
             var fft_output = fft(fft_input);
-            var freq_interval = frame_rate/window_size;
+            var freq_interval = frame_rate/(window_size*2);
             var max_output = 0;
             var max_output_index = 0;
             for (var i = 0; i < fft_output.length; i++) {
@@ -244,7 +244,7 @@ function startProgram() {
             f_output_chunk_plane[width][height] = max_output_freq;
             i_output_chunk_plane[width][height] = gainToDecibels(max_output+1);//*max_output;
         };
-        
+
         
         // Function is called each time the window worth of chunks is sitting as data
         // to turn that data into an array that will be processed by the FFT algorithm
