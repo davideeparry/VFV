@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Creates frequency map of video input.",
   "main": "VFV.js",
+  "type": "module",
   "bin": {
     "vfv": "VFV.js"
   },
