@@ -1,10 +1,23 @@
 import fs from 'fs';
-import fft from 'fourier-transform';
+
 import gainToDecibels from 'decibels/from-gain.js';
 import jpeg from 'jpeg-js';
 import convert from 'color-convert';
 import ffmpeg from 'fluent-ffmpeg';
 import readline from 'readline';
+import {Worker} from "worker_threads";
+
+const threads = new Set();
+
+var debug = false;
+var start = process.hrtime();
+
+var elapsed_time = function(note){
+    var precision = 3; // 3 decimal places
+    var elapsed = process.hrtime(start)[1] / 1000000; // divide by a million to get nano to milli
+    console.log(process.hrtime(start)[0] + " s, " + elapsed.toFixed(precision) + " ms - " + note); // print message + time
+    start = process.hrtime(); // reset the timer
+}
 
 /* this obj which is returned by initArgs() is constantly referenced, these are it's fields for reference 
 var fftVars = { 
@@ -48,8 +61,7 @@ input_video_ffmpeg.on('end', function() {
             input_chunk.copy(data_structs.input_data, fftVars.frame_counter*fftVars.num_pixels, 0, fftVars.num_pixels);
             fftVars.frame_counter = fftVars.frame_counter+1;
             if (fftVars.frame_counter === fftVars.window_size) {
-                processWindow(data_structs); // perform fft
-                makeOutputJpeg(first_window, data_structs); // NOTE: The next refactor should not use the cube array structure and should work directly off the buffer.
+                processWindow(first_window, data_structs); // perform fft // NOTE: The next refactor should not use the cube array structure and should work directly off the buffer.
                 first_window = false;
             }
         } else {
@@ -58,8 +70,7 @@ input_video_ffmpeg.on('end', function() {
             // A second version should only enough for a non-slow-motion video, this will dramatically reduce processing time. 
             data_structs.input_data.copy( data_structs.input_data, 0, fftVars.num_pixels, (fftVars.frame_counter-1)*fftVars.num_pixels )
             input_chunk.copy(data_structs.input_data,(fftVars.frame_counter-2)*fftVars.num_pixels,0,fftVars.num_pixels);
-            processWindow(data_structs); // perform fft.
-            makeOutputJpeg(first_window, data_structs);
+            processWindow(first_window, data_structs); // perform fft.
         }
     });
 
@@ -156,6 +167,7 @@ function createDataStructures(num_pixels, window_size, frame_width, frame_height
 }
 
 function makeOutputJpeg(first_window, data_structs) {
+    if (debug) elapsed_time("start makeOutput Jpeg");
     var data_index = 0;
     var frame_width = fftVars.frame_width;
     var frame_height = fftVars.frame_height;
@@ -197,47 +209,24 @@ function makeOutputJpeg(first_window, data_structs) {
       };
 
     var jpeg_image_data = jpeg.encode(raw_image_data, 100);
+    if (debug) elapsed_time("within OutputJpeg start writing the jpeg");
     fs.writeFile("./output/hsv"+fftVars.output_counter+".jpeg",jpeg_image_data.data, function(err) {
         if (err) {
             console.log(err);
         }
     });
     fftVars.output_counter++;
+    if (debug) elapsed_time("stop makeOutput Jpeg");
 }
 
-function hammingWindow(n) {
-   return (.5 - 0.5*Math.cos(2*Math.PI*n/fftVars.window_size));
-}
 
-function performFftOnPixel(width, height, data_structs) {
-    var fft_input = [];
-    for (var i = 0; i < fftVars.window_size/2; i++) {
-        fft_input.push(0);
-    }
-    for (var frame = 0; frame < (fftVars.window_size); frame++) {
-        fft_input.push(data_structs.chunk_cube[frame][height][width]* hammingWindow(frame));
-    }
-    for (var i = 0; i < fftVars.window_size/2; i++) {
-        fft_input.push(0);
-    }
-    var fft_output = fft(fft_input);
-    var freq_interval = fftVars.frame_rate/(fftVars.window_size*2);
-    var max_output = 0;
-    var max_output_index = 0;
-    for (var i = 0; i < fft_output.length; i++) {
-        if (fft_output[i] > max_output && i > 10) {
-            max_output = fft_output[i];
-            max_output_index = i;
-        }
-    }
-    var max_output_freq = max_output_index * freq_interval;
-    data_structs.f_output_chunk_plane[width][height] = max_output_freq;
-    data_structs.i_output_chunk_plane[width][height] = gainToDecibels(max_output+1);//*max_output;
-}
+
+
 
 // Function is called each time the window worth of chunks is sitting as data
 // to turn that data into an array that will be processed by the FFT algorithm
-function processWindow(data_structs) {
+function processWindow(first_window, data_structs) {
+    if (debug) elapsed_time("start processWindow");
     var data_index = 0;
     for (var frame = 0; frame < fftVars.window_size; frame++) {
         for (var height = 0; height < fftVars.frame_height; height++) {
@@ -247,13 +236,37 @@ function processWindow(data_structs) {
             }
         }
     }
-
-    for (var height = 0; height < fftVars.frame_height; height++) {
-        for (var width = 0; width < fftVars.frame_width; width++) { 
-            performFftOnPixel(width, height, data_structs);
-        }
+    const startPool = () => {
+        return new Promise(function(resolve, reject) {
+            for (var height = 0; height < fftVars.frame_height; height++) {
+                for (var width = 0; width < fftVars.frame_width; width++) { 
+                    let worker = new Worker('./performFftOnPixel.js', { workerData: { width, height, window_size: fftVars.window_size, frame_rate: fftVars.frame_rate, data_structs}});
+                    worker.on('error', (err) => { console.log("ayo"); throw err; });
+                    worker.on('exit', (code) => {
+                        if (code !== 0) reject(new Error(`stopped with  ${code} exit code`));                    
+                    });
+                    worker.on('message', () => {
+                        threads.delete(worker);
+                        console.log(`Thread exiting, ${threads.size} running...`);
+                        if (threads.size === 0) {
+                            makeOutputJpeg(first_window, data_structs);
+                            resolve();
+                        }
+                    });
+                    threads.add(worker);
+                }
+            }
+        });
     }
+    const run = async () => {
+        let res = await startPool();
+        console.log("done pool");
+    };
+    run().catch(err => console.error(err));
+    
+    
     // At this point the chunk_cube is ready to be processed by the FFT
+    if (debug) elapsed_time("stop processWindow");
 }
 
 
