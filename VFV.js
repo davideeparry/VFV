@@ -1,11 +1,10 @@
-import fs from 'fs';
-
-import gainToDecibels from 'decibels/from-gain.js';
-import jpeg from 'jpeg-js';
-import convert from 'color-convert';
-import ffmpeg from 'fluent-ffmpeg';
-import readline from 'readline';
-import {Worker} from "worker_threads";
+const fs = require('fs');
+const gainToDecibels = require('decibels/from-gain.js');
+const jpeg = require('jpeg-js');
+const convert = require('color-convert');
+const ffmpeg = require('fluent-ffmpeg');
+const readline = require('readline');
+const {Worker} = require("worker_threads");
 
 const threads = new Set();
 
@@ -240,12 +239,16 @@ function processWindow(first_window, data_structs) {
         return new Promise(function(resolve, reject) {
             for (var height = 0; height < fftVars.frame_height; height++) {
                 for (var width = 0; width < fftVars.frame_width; width++) { 
-                    let worker = new Worker('./performFftOnPixel.js', { workerData: { width, height, window_size: fftVars.window_size, frame_rate: fftVars.frame_rate, data_structs}});
+                    
+                    let worker = new Worker('./performFftOnPixel.js', { workerData: { width: width, height: height, window_size: fftVars.window_size, frame_rate: fftVars.frame_rate, data_structs: data_structs}});
+                    console.log("made worker");
                     worker.on('error', (err) => { console.log("ayo"); throw err; });
                     worker.on('exit', (code) => {
                         if (code !== 0) reject(new Error(`stopped with  ${code} exit code`));                    
                     });
-                    worker.on('message', () => {
+                    worker.on('message', (data) => {
+                        data_structs.f_output_chunk_plane[width][height] = data.max_output_freq;
+                        data_structs.i_output_chunk_plane[width][height] = data.max_output_db;//*max_output;
                         threads.delete(worker);
                         console.log(`Thread exiting, ${threads.size} running...`);
                         if (threads.size === 0) {
@@ -259,6 +262,7 @@ function processWindow(first_window, data_structs) {
         });
     }
     const run = async () => {
+        console.log("start pool");
         let res = await startPool();
         console.log("done pool");
     };
