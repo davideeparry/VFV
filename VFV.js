@@ -23,6 +23,7 @@ var first_window = 1;
 var max_i= 0;
 var max_f = 0;
 var max_i_f = 0;
+<<<<<<< Updated upstream
 // Program "Boot Sequence"
 if (!process.argv[2] || !process.argv[3] || !process.argv[4] || !process.argv[5] || !process.argv[6]) {
     rl.question('Path to video: ', function(answer) {
@@ -55,10 +56,95 @@ if (!process.argv[2] || !process.argv[3] || !process.argv[4] || !process.argv[5]
 }
 
 function startProgram() {
+=======
+var progress = 0;
+var fftVars;
+
+// START of processing
+export function startVFV(args, videoFile) {
+    fftVars = initArgs(args);
+
+    // using fluent-ffmpeg to convert video into yuv format
+    var input_video_ffmpeg = ffmpeg(videoFile);
+
+    input_video_ffmpeg.on('codecData', (data) => {
+        // displays information on the decoded video file
+        console.log(data);
+    }).save('./temp.yuv'); // specifying the .yuv file ext will cause ffmpeg to convert to yuv420
+
+    input_video_ffmpeg.on('end', function() {
+
+        var first_window = true;
+        // data_structs holds the data per each processing window, not sure if it being garbage collected each iteration or having it be reused is better.
+        var data_structs = createDataStructures(fftVars.num_pixels, fftVars.window_size, fftVars.frame_width, fftVars.frame_height);
+        fs.stat('./temp.yuv', function (err, stats) {
+            var fileSize = stats.size;
+            var processedBytes = 0;
+            var file = fs.createReadStream('./temp.yuv', {highWaterMark: fftVars.chunk_size});
+
+            file.on('data', function (input_chunk) {
+                // first_window exists because the entire fft window needs to be loaded first, after the first fft window is loaded the proceeding windows will overlap.
+                if (first_window) {
+                    input_chunk.copy(data_structs.input_data, fftVars.frame_counter*fftVars.num_pixels, 0, fftVars.num_pixels);
+                    fftVars.frame_counter = fftVars.frame_counter+1;
+                    if (fftVars.frame_counter === fftVars.window_size) {
+                        processWindow(data_structs); // perform fft
+                        makeOutputJpeg(first_window, data_structs); // NOTE: The next refactor should not use the cube array structure and should work directly off the buffer.
+                        first_window = false;
+                    }
+                } else {
+                    // reindex buffer so that the first entry is now the second entry and there is one 
+                    // more spot avaliable at the end of the buffer. In this iteration this is because the output video will have the same number of frames. 
+                    // A second version should only enough for a non-slow-motion video, this will dramatically reduce processing time. 
+                    data_structs.input_data.copy( data_structs.input_data, 0, fftVars.num_pixels, (fftVars.frame_counter-1)*fftVars.num_pixels )
+                    input_chunk.copy(data_structs.input_data,(fftVars.frame_counter-2)*fftVars.num_pixels,0,fftVars.num_pixels);
+                    processWindow(data_structs); // perform fft.
+                    makeOutputJpeg(first_window, data_structs);
+                }
+            });
+
+            file.on('end', function() {
+                console.log("Video File Processed.");
+                fs.unlink('./temp.yuv', function(err) {
+                    if (err) {
+                       console.log(err);
+                    }
+                });
+                // assembles the images into a video
+                var proc = ffmpeg('./output/hsv%d.jpeg')
+                .fps(25)
+                .addOption('-vf','format=yuv420p')
+                .save('./output/video.mp4');
+            });
+            process.on('exit', function(code) {
+                fs.unlink('./temp.yuv', function(err) {
+                    if (err) {
+                       console.log(err);
+                    }
+                });
+            });
+
+        }); 
+    });      
+}
+
+
+// END of processing, beyond here be functions.
+
+function initArgs(args) {
+    var fftVars = {};
+    
+    fftVars.frame_width = args.width;
+    fftVars.frame_height = args.height;
+    fftVars.window_size = args.windowSize;
+    fftVars.frame_rate = args.FPS;
+    
+>>>>>>> Stashed changes
     // Create output directory if does not exist
     if (!fs.existsSync('./output')){
         fs.mkdirSync('./output');
     }
+<<<<<<< Updated upstream
     // Read in input file metadata, rest of program waits on this. TODO: Should format differently.
     ff_input_file_temp.on('codecData', function (data) {
         console.log(data);
@@ -78,6 +164,24 @@ function startProgram() {
             for (var height = 0; height < frame_height; height++) {
                 chunk_cube[frame][height] = new Array();
             }
+=======
+    // num_pixels is the number of pixels per frame
+    fftVars.num_pixels = fftVars.frame_width*fftVars.frame_height;
+    // chunk size is the size in bytes of each YUV420 frame
+    fftVars.chunk_size = fftVars.num_pixels + (fftVars.num_pixels/2);
+    fftVars.frame_counter = 0;
+    fftVars.output_counter = 0;
+    return fftVars;
+}
+
+function createDataStructures(num_pixels, window_size, frame_width, frame_height) {
+    var input_data = Buffer.allocUnsafe(num_pixels*window_size);
+    var chunk_cube = new Array();
+    for (var frame = 0; frame < window_size; frame++) {
+        chunk_cube[frame] = new Array();
+        for (var height = 0; height < frame_height; height++) {
+            chunk_cube[frame][height] = new Array();
+>>>>>>> Stashed changes
         }
         
         var f_output_chunk_plane = new Array();
