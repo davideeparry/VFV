@@ -1,7 +1,13 @@
 import React from 'react';
 import '../css/styles.css';
 import Modal from './Modal';
-import {startVFV} from '../VFV/VFV';
+import {postVideo} from '../api/axios';
+
+var socket = new WebSocket('ws://localhost:5001');
+socket.onmessage = function(e) {
+    //this.setState({ progress: e.data});
+    console.log(e.data);
+};
 
 class App extends React.Component {
     constructor() {
@@ -11,19 +17,25 @@ class App extends React.Component {
             showProcessing: false,
             showCompleted: false,
             selectedVideo: null,
-            windowSize: 0,
-            FPS: 0,
-            height: 0,
-            width: 0
+            windowSize: 128,
+            FPS: 960,
+            height: 720,
+            width: 1280,
+            progress: 0
         };
+        
+        
     }
     submitVFV() {
+        
         this.setState({ showVideoSelector: false, showCompleted: false, showProcessing: true});
-        startVFV({width: this.state.width, height: this.state.height, FPS: this.state.FPS, windowSize: this.state.windowSize}, this.state.selectedVideo);
+        postVideo({width: this.state.width, height: this.state.height, FPS: this.state.FPS, windowSize: this.state.windowSize}, this.state.selectedVideo);
+        this.checkVFVProgress();
         return 0;
     }
-    checkVFVProgress() {
-        return 0;
+    checkVFVProgress = () => {
+        socket.send('update progress');
+        if ( this.state.progress !== 100) setTimeout(this.checkVFVProgress, 5000);
     }
     // processing
     toggleProcessing = () => {
@@ -42,9 +54,9 @@ class App extends React.Component {
     }
     renderProcessingContent = () => {
         return (
-            <div className="ui teal progress" data-percent="74" id="example1">
+            <div className="ui teal progress" data-percent={this.state.progress} id="example1">
                 <div className="bar"></div>
-                <div className="label">74% Processed</div>
+                <div className="label">{this.state.progress}% Processed</div>
             </div>
         )
     }
