@@ -11,14 +11,53 @@ import { WebSocketServer } from 'ws';
 
 const wss = new WebSocketServer({ port: 5001 });
 
+const app = express();
+
 wss.on('connection', function connection(ws) {
     ws.send('WebSocket opened');
     ws.on('message', function message(data) {
-        ws.send(progress);
+        ws.send(sizeProcessed + "/" + fileSize);
     });
+    
+
+
+    app.options("/*", function(req, res, next){
+        res.header('Access-Control-Allow-Origin', '*');
+        res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With');
+        res.sendStatus(200);
+    });
+
+    app.post("/", (req, res) => {
+        //res.set('Access-Control-Allow-Origin', '*');
+        const form = new formidable.IncomingForm();
+        form.parse(req, function(err, fields, files) {
+            if (err != null) {
+                console.log(err);
+                return res.status(400).json({ message: err.message });
+            }
+            const [firstFileName] = Object.keys(files);
+            //console.log(files.video);
+            startVFV(fields,files.video, ws);
+
+            res.set('Access-Control-Allow-Origin', '*');
+            res.json({ filename: firstFileName });
+        })
+    });
+
+    app.get('/download', function(req, res){
+        const file = `${process.cwd()}/output/video.mp4`;
+        res.set('Access-Control-Allow-Origin', '*');
+        res.download(file); // Set disposition and send it.
+      });
+
+    
     
 });
 
+app.listen(5000, () => {
+    console.log("VFV server started on port 5000");
+});
 
 /* this obj which is returned by initArgs() is constantly referenced, these are it's fields for reference 
 var fftVars = { 
@@ -39,41 +78,11 @@ var max_i_f = 0;
 
 var fileSize = 100;
 var sizeProcessed = 0;
-var progress = sizeProcessed/fileSize;
 var fftVars;
 
-const app = express();
 
-
-app.options("/*", function(req, res, next){
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With');
-    res.sendStatus(200);
-  });
-
-app.post("/", (req, res) => {
-    //res.set('Access-Control-Allow-Origin', '*');
-    const form = new formidable.IncomingForm();
-    form.parse(req, function(err, fields, files) {
-        if (err != null) {
-            console.log(err);
-            return res.status(400).json({ message: err.message });
-        }
-        const [firstFileName] = Object.keys(files);
-        //console.log(files.video);
-        startVFV(fields,files.video);
-
-        res.set('Access-Control-Allow-Origin', '*');
-        res.json({ filename: firstFileName });
-    })
-});
-
-app.listen(5000, () => {
-    console.log("VFV server started on port 5000");
-});
 // START of processing
-export function startVFV(args, videoFile) {
+export function startVFV(args, videoFile, ws) {
     fftVars = initArgs(args);
     //console.log(fftVars);
     // using fluent-ffmpeg to convert video into yuv format
@@ -92,8 +101,10 @@ export function startVFV(args, videoFile) {
             fileSize = stats.size;
             
             var file = fs.createReadStream('./temp.yuv', {highWaterMark: fftVars.chunk_size});
-            sizeProcessed = sizeProcessed + fftVars.chunk_size;
+            
             file.on('data', function (input_chunk) {
+                var fpsDivisor = fftVars.frame_rate / 30;
+                sizeProcessed = sizeProcessed + fftVars.chunk_size;
                 // first_window exists because the entire fft window needs to be loaded first, after the first fft window is loaded the proceeding windows will overlap.
                 if (first_window) {
                     input_chunk.copy(data_structs.input_data, fftVars.frame_counter*fftVars.num_pixels, 0, fftVars.num_pixels);
@@ -104,18 +115,24 @@ export function startVFV(args, videoFile) {
                         first_window = false;
                     }
                 } else {
+                    fftVars.frame_counter = fftVars.frame_counter+1;
                     // reindex buffer so thatthe first entry is now the second entry and there is one 
                     // more spot avaliable at the end of the buffer. In this iteration this is because the output video will have the same number of frames. 
                     // A second version should only enough for a non-slow-motion video, this will dramatically reduce processing time. 
-                    data_structs.input_data.copy( data_structs.input_data, 0, fftVars.num_pixels, (fftVars.frame_counter-1)*fftVars.num_pixels )
-                    input_chunk.copy(data_structs.input_data,(fftVars.frame_counter-2)*fftVars.num_pixels,0,fftVars.num_pixels);
-                    processWindow(data_structs); // perform fft.
-                    makeOutputJpeg(first_window, data_structs);
+                    // TEMP NOTES: If the highspeed vid fps is 240, and we 60fps out then that is
+                    data_structs.input_data.copy( data_structs.input_data, 0, fftVars.num_pixels, (fftVars.window_size-1)*fftVars.num_pixels )
+                    input_chunk.copy(data_structs.input_data,(fftVars.window_size-2)*fftVars.num_pixels,0,fftVars.num_pixels);
+                    if (fftVars.frame_counter % Math.ceil(fftVars.frame_rate/30) === 0) {
+                        processWindow(data_structs); // perform fft.
+                        makeOutputJpeg(first_window, data_structs);
+                    }
+                    
                 }
             });
 
             file.on('end', function() {
                 console.log("Video File Processed.");
+                
                 fs.unlink('./temp.yuv', function(err) {
                     if (err) {
                        console.log(err);
@@ -126,6 +143,7 @@ export function startVFV(args, videoFile) {
                 .fps(25)
                 .addOption('-vf','format=yuv420p')
                 .save('./output/video.mp4');
+                ws.send("done");
             });
             process.on('exit', function(code) {
                 fs.unlink('./temp.yuv', function(err) {

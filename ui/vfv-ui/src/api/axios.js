@@ -1,7 +1,6 @@
-const axios = require('axios');
-const FormData = require('form-data');
-
-
+import axios from 'axios';
+import FormData from 'form-data';
+import FileDownload from 'js-file-download';
 
 export async function postVideo(params, video) {
     const form = new FormData();
@@ -19,6 +18,13 @@ export async function postVideo(params, video) {
     });
     console.log(response);
 }
+
+export async function getVideo() {
+    const response = await axios.get('http://localhost:5000/download', {responseType: 'blob'});
+    // from https://stackoverflow.com/questions/41938718/how-to-download-files-using-axios
+    FileDownload(response.data, 'vfv-output.mp4');
+}
+
 
 
 

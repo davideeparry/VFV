@@ -1,13 +1,8 @@
 import React from 'react';
 import '../css/styles.css';
 import Modal from './Modal';
-import {postVideo} from '../api/axios';
-
-var socket = new WebSocket('ws://localhost:5001');
-socket.onmessage = function(e) {
-    //this.setState({ progress: e.data});
-    console.log(e.data);
-};
+import {postVideo, getVideo} from '../api/axios';
+import {Progress} from 'semantic-ui-react';
 
 class App extends React.Component {
     constructor() {
@@ -21,10 +16,31 @@ class App extends React.Component {
             FPS: 960,
             height: 720,
             width: 1280,
-            progress: 0
+            fileSize: 100,
+            fileProcessed: 0,
+            progress: 0,
+            progressSuccess: false
         };
-        
-        
+        this.socket = undefined;
+    }
+
+    componentDidMount = () => {
+        this.socket = new WebSocket('ws://localhost:5001');
+        var cacheThis = this;
+        this.socket.onmessage = function(e) {
+            console.log(e.data);
+            if (e.data === "done" || cacheThis.state.fileProcessed === cacheThis.state.fileSize) {
+                cacheThis.setState({ progressSuccess: true });
+                setTimeout(cacheThis.toggleCompleted, 2000);
+                
+            } else {
+                var [fProcessed, fSize] = e.data.split('/');
+                cacheThis.setState({ fileSize: fSize, fileProcessed: fProcessed, progress: Math.ceil(100*(fProcessed/fSize))});
+            }        
+        };
+    }
+    componentWillUnmount() {
+        this.socket.close();
     }
     submitVFV() {
         
@@ -34,8 +50,24 @@ class App extends React.Component {
         return 0;
     }
     checkVFVProgress = () => {
-        socket.send('update progress');
+        this.socket.send('update progress');
         if ( this.state.progress !== 100) setTimeout(this.checkVFVProgress, 5000);
+    }
+    resetState = () => {
+        this.setState({
+            showVideoSelector: false,
+            showProcessing: false,
+            showCompleted: false,
+            selectedVideo: null,
+            windowSize: 128,
+            FPS: 960,
+            height: 720,
+            width: 1280,
+            fileSize: 100,
+            fileProcessed: 0,
+            progress: 0,
+            progressSuccess: false
+        });
     }
     // processing
     toggleProcessing = () => {
@@ -52,22 +84,55 @@ class App extends React.Component {
             )
         }
     }
-    renderProcessingContent = () => {
-        return (
-            <div className="ui teal progress" data-percent={this.state.progress} id="example1">
-                <div className="bar"></div>
-                <div className="label">{this.state.progress}% Processed</div>
-            </div>
-        )
-    }
     renderProcessingActions = () => {
-
+        
+    }
+    renderProcessingContent = () => {
+        var labelString; 
+        if (this.state.progressSuccess) {
+            
+            labelString = `${this.state.fileSize} bytes of ${this.state.fileSize} processed`;
+            return (
+                <Progress percent={this.state.progress} label={labelString} success />
+            )
+        } else {
+            labelString = `${this.state.fileProcessed} bytes of ${this.state.fileSize} processed`;
+            return (
+                <Progress percent={this.state.progress} label={labelString} progress />
+            )
+        }
     }
     //completed
     toggleCompleted = () => {
-        this.setState({ showCompleted: !this.state.showCompleted });
+        this.setState({ showCompleted: true, showVideoSelector: false, showProcessing: false });
     }
-    
+    renderCompleted = () => {
+        if (this.state.showCompleted) {
+            return (
+                <Modal 
+                    title="Processing Complete!"
+                    content={this.renderCompletedContent()}
+                    actions={this.renderCompletedActions()}
+                />  
+            );
+        }
+    }
+    renderCompletedActions = () => {
+        return (
+            <React.Fragment>
+                <button onClick={() => getVideo()} className="ui button">Download VFV</button>
+                <button onClick={() => this.resetState()} className="ui button">Transform Another Video</button>
+            </React.Fragment>
+        );
+        
+    }
+    renderCompletedContent = () => {
+        return (
+            <div>
+                The video is processed and ready to be downloaded.
+            </div>
+        );
+    }
     // selector
     toggleSelector = () => {
         this.setState({ showVideoSelector: !this.state.showVideoSelector });
@@ -145,6 +210,7 @@ class App extends React.Component {
                 </div>
                 {this.renderSelector()}
                 {this.renderProcessing()}
+                {this.renderCompleted()}
             </div>
         );
     }
