@@ -12,20 +12,36 @@ import { WebSocketServer } from 'ws';
 const wss = new WebSocketServer({ port: 5001 });
 
 const app = express();
+app.listen(5000, () => {
+    console.log("VFV server started on port 5000");
+});
+
+var folderInc = 0;
+var processingActive = false;
 
 wss.on('connection', function connection(ws) {
-    ws.send('WebSocket opened');
+    if (processingActive) {
+        ws.send("active");
+    } 
     ws.on('message', function message(data) {
+        if (data.toString() === "reset") {
+            console.log("reset");
+            resetVFV();
+        } 
         ws.send(sizeProcessed + "/" + fileSize);
+        console.log(data.toString());
+        
     });
-    
-
 
     app.options("/*", function(req, res, next){
         res.header('Access-Control-Allow-Origin', '*');
         res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
         res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With');
         res.sendStatus(200);
+    });
+
+    ws.on('close', function(reasonCode, description) {
+        console.log((new Date()) + ' Peer ' + ws.remoteAddress + ' disconnected.');
     });
 
     app.post("/", (req, res) => {
@@ -46,18 +62,17 @@ wss.on('connection', function connection(ws) {
     });
 
     app.get('/download', function(req, res){
-        const file = `${process.cwd()}/output/video.mp4`;
+        const file = `${process.cwd()}/output`+folderInc+`/video.mp4`;
         res.set('Access-Control-Allow-Origin', '*');
         res.download(file); // Set disposition and send it.
+        
       });
+    
 
-    
-    
+
 });
 
-app.listen(5000, () => {
-    console.log("VFV server started on port 5000");
-});
+
 
 /* this obj which is returned by initArgs() is constantly referenced, these are it's fields for reference 
 var fftVars = { 
@@ -80,9 +95,20 @@ var fileSize = 100;
 var sizeProcessed = 0;
 var fftVars;
 
+function resetVFV() {
+    max_i= 0;
+    max_f = 0;
+    max_i_f = 0;
+    fileSize = 100;
+    sizeProcessed = 0;
+    fftVars = {};
+    processingActive = false;
+}
+
 
 // START of processing
 export function startVFV(args, videoFile, ws) {
+    processingActive = true;
     fftVars = initArgs(args);
     //console.log(fftVars);
     // using fluent-ffmpeg to convert video into yuv format
@@ -139,39 +165,40 @@ export function startVFV(args, videoFile, ws) {
                     }
                 });
                 // assembles the images into a video
-                var proc = ffmpeg('./output/hsv%d.jpeg')
+                var proc = ffmpeg('./output'+folderInc+'/hsv%d.jpeg')
                 .fps(25)
                 .addOption('-vf','format=yuv420p')
-                .save('./output/video.mp4');
+                .save('./output'+folderInc+'/video.mp4');
                 ws.send("done");
+                //resetVFV();
             });
-            process.on('exit', function(code) {
-                fs.unlink('./temp.yuv', function(err) {
-                    if (err) {
-                       console.log(err);
-                    }
-                });
-            });
+            
 
         }); 
     });      
 }
+
+process.on('exit', function(code) {
+    fs.unlink('./temp.yuv', function(err) {
+        if (err) {
+           console.log(err);
+        }
+    });
+});
 
 
 // END of processing, beyond here be functions.
 
 function initArgs(args) {
     var fftVars = {};
-    
     fftVars.frame_width = args.width;
     fftVars.frame_height = args.height;
     fftVars.window_size = args.windowSize;
     fftVars.frame_rate = args.FPS;
     
     // Create output directory if does not exist
-    if (!fs.existsSync('./output')){
-        fs.mkdirSync('./output');
-    }
+    fs.rmSync('./output'+folderInc, { recursive: true, force: true });
+    fs.mkdirSync('./output' + folderInc);
     // num_pixels is the number of pixels per frame
     fftVars.num_pixels = fftVars.frame_width*fftVars.frame_height;
     // chunk size is the size in bytes of each YUV420 frame
@@ -246,7 +273,7 @@ function makeOutputJpeg(first_window, data_structs) {
       };
 
     var jpeg_image_data = jpeg.encode(raw_image_data, 100);
-    fs.writeFile("./output/hsv"+fftVars.output_counter+".jpeg",jpeg_image_data.data, function(err) {
+    fs.writeFile("./output"+folderInc+"/hsv"+fftVars.output_counter+".jpeg",jpeg_image_data.data, function(err) {
         if (err) {
             console.log(err);
         }
