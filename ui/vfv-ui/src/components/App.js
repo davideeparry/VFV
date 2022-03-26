@@ -4,6 +4,8 @@ import Modal from './Modal';
 import {postVideo, getVideo} from '../api/axios';
 import {Progress} from 'semantic-ui-react';
 
+import msgs from '../api/msgs';
+
 class App extends React.Component {
     constructor() {
         super();
@@ -28,17 +30,17 @@ class App extends React.Component {
         this.socket = new WebSocket('ws://localhost:5001');
         var cacheThis = this;
         this.socket.onmessage = function(e) {
-            console.log(e.data);
-            if (e.data === "done" || cacheThis.state.fileProcessed === cacheThis.state.fileSize) {
+            console.log(e.data.toString());
+            var msg = JSON.parse(e.data.toString());
+            if (msg.type === msgs.types.DONE || cacheThis.state.fileProcessed === cacheThis.state.fileSize) {
                 cacheThis.setState({ progressSuccess: true });
                 setTimeout(cacheThis.toggleCompleted, 2000);
-            } else if (e.data === "active") {
+            } else if (msg.type === msgs.types.ACTIVE) {
                 cacheThis.setState({ showVideoSelector: false, showCompleted: false, showProcessing: true});
-                cacheThis.checkVFVProgress();
-            } else {
-                var [fProcessed, fSize] = e.data.split('/');
+                cacheThis.setState({ fileSize: msg.fileSize, fileProcessed: msg.sizeProcessed, progress: Math.ceil(100*(msg.sizeProcessed/msg.fileSize))});
+            } else if (msg.type === msgs.types.PROGRESS) {
                 if (cacheThis.state.showProcessing === true) {
-                    cacheThis.setState({ fileSize: fSize, fileProcessed: fProcessed, progress: Math.ceil(100*(fProcessed/fSize))});
+                    cacheThis.setState({ fileSize: msg.fileSize, fileProcessed: msg.sizeProcessed, progress: Math.ceil(100*(msg.sizeProcessed/msg.fileSize))});
                 }
             }        
         };
@@ -49,16 +51,10 @@ class App extends React.Component {
     submitVFV() {
         this.setState({ showVideoSelector: false, showCompleted: false, showProcessing: true});
         postVideo({width: this.state.width, height: this.state.height, FPS: this.state.FPS, windowSize: this.state.windowSize}, this.state.selectedVideo);
-        setTimeout(this.checkVFVProgress, 5000);
         return 0;
     }
-    checkVFVProgress = () => {
-        console.log("sending out update");
-        this.socket.send('update progress');
-        if (this.state.showProcessing === true) setTimeout(this.checkVFVProgress, 5000);
-    }
     resetState = () => {
-        this.socket.send("reset");
+        this.socket.send(msgs.reset());
         this.setState({
             showVideoSelector: false,
             showProcessing: false,
