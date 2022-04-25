@@ -134,6 +134,10 @@ class App extends React.Component {
   renderProcessingContent = () => {
     const { state } = this;
     let labelString;
+    if (state.progress === 0) {
+      labelString = `Initializing...`;
+      return <Progress percent={state.progress} label={labelString} progress />;
+    }
     if (state.progressSuccess) {
       labelString = `${state.fileSize} bytes of ${state.fileSize} processed`;
       return <Progress percent={state.progress} label={labelString} success />;

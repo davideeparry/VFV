@@ -4,7 +4,13 @@ const jpeg = require('jpeg-js');
 const convert = require('color-convert');
 const fs = require('fs');
 const ffmpeg = require('fluent-ffmpeg');
+/*  const ffmpegPath = require('ffmpeg-static').replace(
+  'app.asar',
+  'app.asar.unpacked'
+);  */
 const vfvState = require('./vfvState').default;
+
+//  ffmpeg.setFfmpegPath(ffmpegPath);
 
 exports.default = {
   jpegToMp4: () => {
