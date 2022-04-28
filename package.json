@@ -1,6 +1,6 @@
 {
-  "name": "electron-react-boilerplate",
-  "description": "A foundation for scalable desktop apps",
+  "name": "VFV",
+  "description": "Pixel based FFT for high speed video.",
   "scripts": {
     "build": "concurrently \"npm run build:main\" \"npm run build:renderer\"",
     "build:main": "cross-env NODE_ENV=production TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.main.prod.ts",
@@ -31,7 +31,7 @@
     ]
   },
   "build": {
-    "productName": "ElectronReact",
+    "productName": "VFV",
     "appId": "org.erb.ElectronReact",
     "asar": true,
     "asarUnpack": "**\\*.{node,dll}",
@@ -238,6 +238,7 @@
     "electron-updater": "^4.6.5",
     "express": "^4.17.3",
     "express-fileupload": "^1.3.1",
+    "ffmpeg-static": "^5.0.0",
     "fft-js": "^0.0.12",
     "fluent-ffmpeg": "^2.1.2",
     "form-data": "^4.0.0",

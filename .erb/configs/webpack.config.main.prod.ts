@@ -32,6 +32,7 @@ const configuration: webpack.Configuration = {
   entry: {
     main: path.join(webpackPaths.srcMainPath, 'main.ts'),
     preload: path.join(webpackPaths.srcMainPath, 'preload.ts'),
+    VFV: path.join(webpackPaths.srcMainPath, 'VFV.js'),
   },
 
   output: {
