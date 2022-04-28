@@ -1,3 +1,16 @@
+## Video Fourier Transform
+
+VFV takes high-speed video as input and outputs a video that visualizes the fundamental oscillating or vibrating frequency of any vibrating objects in the frame. The input to the program is a video of the object in question where the video’s Nyquist rate is high enough to capture the oscillating/vibrating object’s fundamental frequency. The program performs a pixel-by-pixel FFT 
+where the FFT buffer size is chosen by the user. For each set of buffers processed the program advances forward in the video by 
+the length of the buffer and begins to process a new set of buffers. Each time a set of pixel-by-pixel FFT’s is processed the 
+program produces an image. Once the entire video has been processed the program ends and the images are re-assembled into a output video. The visualization is intended for human viewing and is intended to show what portions of the image are vibrating/oscillating as well as represent the oscillation/vibration rate, and energy of the sinusoid at that frequency. The original project report can be read here: https://drive.google.com/file/d/1GlAHcaGRv1aOAK1Abo_vcnaNvdJIq0KU/view?usp=sharing
+
+The program has since had the code reformated and been turned into a React application.
+
+The front-end was written using React and Electron using the Electron React Boilerplate. The original program already has no business being written in Node.js. This project is currently abandoned because it should be re-written in a language more adept for multi-threaded mathematical computer such as C++.
+
+This projected was recently cleaned up to be used as a coding example and for personal use. 
+
 <img src=".erb/img/erb-banner.svg" width="100%" />
 
 <br>
